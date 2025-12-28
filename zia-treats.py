@@ -1,84 +1,137 @@
 import streamlit as st
-import pandas as pd
-from datetime import datetime
+import time
 
-# --- Page Config & Styling ---
-st.set_page_config(page_title="Zia Sweet Treats", page_icon="🍪", layout="wide")
+# --- High-Fidelity Styling ---
+def local_css():
+    st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Helvetica+Neue:wght@300;700&display=swap');
+        
+        html, body, [class*="css"]  {
+            font-family: 'Helvetica Neue', sans-serif;
+        }
+        
+        /* Sticky Header */
+        .main-header {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: white;
+            z-index: 1000;
+            border-bottom: 1px solid #f0f0f0;
+            padding: 10px 0;
+            text-align: center;
+        }
+        
+        /* Crumbl-Style Cookie Card */
+        .cookie-card {
+            background: #fff;
+            border-radius: 24px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            text-align: center;
+            border: 1px solid #f1f1f1;
+        }
+        
+        /* The Pink Button */
+        .stButton>button {
+            background-color: #FFD1DC !important;
+            color: #333 !important;
+            border: none !important;
+            border-radius: 50px !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0.6rem 2rem;
+            transition: all 0.3s ease;
+        }
+        
+        .stButton>button:hover {
+            background-color: #F8B1C3 !important;
+            transform: translateY(-2px);
+        }
 
-st.markdown("""
-    <style>
-    .stApp { background-color: #FFFFFF; }
-    /* Crumbl Pink accents */
-    [data-testid="stSidebar"] { background-color: #FDF2F4; border-right: 1px solid #FFD1DC; }
-    .stButton>button { background-color: #FFD1DC; border-radius: 50px; font-weight: bold; width: 100%; border: none; }
-    .stButton>button:hover { background-color: #F8B1C3; color: white; }
-    h1 { color: #333333; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
-    </style>
+        /* Sidebar Customization */
+        [data-testid="stSidebar"] {
+            background-color: #fdf2f4;
+        }
+        </style>
     """, unsafe_allow_html=True)
 
-# --- State Management ---
-if 'page' not in st.session_state: st.session_state.page = 'Home'
-if 'user' not in st.session_state: st.session_state.user = {"name": "", "logged_in": False}
-if 'box_items' not in st.session_state: st.session_state.box_items = []
+# --- App Logic & State ---
+if 'view' not in st.session_state: st.session_state.view = 'home'
+if 'box_size' not in st.session_state: st.session_state.box_size = 0
+if 'selection' not in st.session_state: st.session_state.selection = []
 
-# --- Sidebar Menu ---
+DATA = {
+    "boxes": {
+        "Single": {"qty": 1, "price": 4.50},
+        "4-Pack": {"qty": 4, "price": 15.50},
+        "6-Pack": {"qty": 6, "price": 22.25},
+        "12-Pack": {"qty": 12, "price": 38.50}
+    },
+    "flavors": [
+        {"name": "Milk Chocolate Chip", "tags": "WARM", "cals": "140-720 cal", "img": "https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=400"},
+        {"name": "Pink Velvet", "tags": "CHILLED", "cals": "160-800 cal", "img": "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=400"},
+        {"name": "Brownie Sundae", "tags": "WARM", "cals": "180-920 cal", "img": "https://images.unsplash.com/photo-1590080876251-130a74c692dd?w=400"},
+        {"name": "Lemon Glaze", "tags": "WARM", "cals": "130-650 cal", "img": "https://images.unsplash.com/photo-1506459225024-1428097a7e18?w=400"}
+    ]
+}
+
+local_css()
+
+# --- Navigation ---
 with st.sidebar:
-    st.image("https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=200", caption="Zia Sweet Treats")
-    st.title("Menu")
-    
-    # Navigation Buttons
-    if st.button("🏠 Home"): st.session_state.page = 'Home'
-    if st.button("🍪 Order Now"): st.session_state.page = 'Order'
-    if st.button("👤 Sign In"): st.session_state.page = 'Sign In'
-    
-    st.divider()
-    if st.session_state.user["logged_in"]:
-        st.write(f"Logged in as: **{st.session_state.user['name']}**")
-        if st.button("Logout"):
-            st.session_state.user = {"name": "", "logged_in": False}
-            st.rerun()
+    st.title("ZIA")
+    if st.button("🏠 Home"): st.session_state.view = 'home'
+    if st.button("🛍️ Order Now"): st.session_state.view = 'box_select'
+    if st.button("👤 Loyalty Rewards"): st.session_state.view = 'auth'
 
-# --- Page Logic ---
-
-# HOME PAGE
-if st.session_state.page == 'Home':
-    st.markdown("<h1>Zia Sweet Treats</h1>", unsafe_allow_html=True)
-    st.image("https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=1000", use_container_width=True)
-    st.markdown("### This Week's Flavors")
-    st.write("Taste the rotating menu that Lubbock is talking about!")
-    if st.button("START YOUR ORDER"):
-        st.session_state.page = 'Order'
+# --- Views ---
+if st.session_state.view == 'home':
+    st.markdown("<h1 style='text-align:center;'>This Week's Lineup</h1>", unsafe_allow_html=True)
+    cols = st.columns(len(DATA["flavors"]))
+    for i, flavor in enumerate(DATA["flavors"]):
+        with cols[i]:
+            st.image(flavor["img"])
+            st.markdown(f"**{flavor['name']}**")
+    if st.button("START ORDER"):
+        st.session_state.view = 'box_select'
         st.rerun()
 
-# SIGN IN PAGE
-elif st.session_state.page == 'Sign In':
-    st.markdown("<h1>Sign In</h1>", unsafe_allow_html=True)
-    with st.container():
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            name = st.text_input("First Name")
-            phone = st.text_input("Phone Number")
-            if st.button("Access My Rewards"):
-                st.session_state.user = {"name": name, "logged_in": True}
-                st.session_state.page = 'Home'
+elif st.session_state.view == 'box_select':
+    st.markdown("<h1 style='text-align:center;'>Choose Your Box</h1>", unsafe_allow_html=True)
+    cols = st.columns(4)
+    for i, (name, details) in enumerate(DATA["boxes"].items()):
+        with cols[i]:
+            st.markdown(f"""<div class="cookie-card"><h3>{name}</h3><p>${details['price']:.2f}</p></div>""", unsafe_allow_html=True)
+            if st.button(f"SELECT {name.split('-')[0]}", key=name):
+                st.session_state.box_size = details['qty']
+                st.session_state.current_box_name = name
+                st.session_state.view = 'flavor_select'
                 st.rerun()
 
-# ORDER PAGE (Box-First Flow)
-elif st.session_state.page == 'Order':
-    st.markdown("<h1>Select Your Box</h1>", unsafe_allow_html=True)
+elif st.session_state.view == 'flavor_select':
+    remaining = st.session_state.box_size - len(st.session_state.selection)
+    col1, col2 = st.columns([3, 1])
     
-    # Reusing our Box-First Logic
-    boxes = {"Single": 4.50, "4-Pack": 15.50, "6-Pack": 22.25, "12-Pack": 38.50}
-    cols = st.columns(len(boxes))
-    
-    for i, (name, price) in enumerate(boxes.items()):
-        with cols[i]:
-            st.markdown(f"""
-                <div style="text-align:center; border:1px solid #eee; padding:20px; border-radius:15px;">
-                    <h4>{name}</h4>
-                    <p>${price:.2f}</p>
-                </div>
-            """, unsafe_allow_html=True)
-            if st.button(f"SELECT {name}", key=name):
-                st.success(f"{name} selected! Next: Pick your flavors.")
-                # Logic for flavor selection would follow here
+    with col1:
+        st.markdown(f"## Fill Your {st.session_state.current_box_name}")
+        st.caption(f"Select {remaining} more cookies")
+        f_cols = st.columns(2)
+        for i, f in enumerate(DATA["flavors"]):
+            with f_cols[i % 2]:
+                st.markdown(f"""<div class="cookie-card"><img src="{f['img']}" width="100%"><br><b>{f['name']}</b><br><small>{f['tags']} • {f['cals']}</small></div>""", unsafe_allow_html=True)
+                if st.button(f"Add {f['name']}", disabled=remaining <= 0, key=f"btn_{i}"):
+                    st.session_state.selection.append(f['name'])
+                    st.rerun()
+
+    with col2:
+        st.markdown("### Your Box")
+        for item in st.session_state.selection:
+            st.markdown(f"✅ {item}")
+        if remaining == 0:
+            if st.button("CHECKOUT"):
+                st.balloons()
+                st.success("Redirecting to payment...")
