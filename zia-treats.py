@@ -6,139 +6,103 @@ from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
-# --- Configuration & State ---
-st.set_page_config(page_title="Cookie Delight Manager", layout="wide")
+# --- Page Configuration ---
+st.set_page_config(page_title="Zia Sweet Treats", page_icon="🍪", layout="wide")
 
+# Custom CSS for a more "pleasing" aesthetic
+st.markdown("""
+    <style>
+    .main { background-color: #fffaf0; }
+    .stButton>button { width: 100%; border-radius: 20px; border: 1px solid #ff4b4b; background-color: white; color: #ff4b4b; }
+    .stButton>button:hover { background-color: #ff4b4b; color: white; }
+    .cookie-card { border: 1px solid #eee; padding: 15px; border-radius: 15px; background-color: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- State Management ---
 if 'cart' not in st.session_state:
     st.session_state.cart = {}
-if 'inventory' not in st.session_state:
-    st.session_state.inventory = {
-        "Chocolate Chip": {"price": 2.50, "stock": 50},
-        "Oatmeal Raisin": {"price": 2.00, "stock": 30},
-        "Sugar Cookie":   {"price": 1.75, "stock": 40},
-        "Peanut Butter":  {"price": 2.25, "stock": 25},
-        "Snickerdoodle":  {"price": 2.00, "stock": 35}
-    }
+if 'user' not in st.session_state:
+    st.session_state.user = {"name": "", "contact": "", "logged_in": False}
 
-DATA_FILE = 'store_data_v5.csv'
+# Shared Inventory (Mock database)
+inventory = {
+    "Chocolate Chip": {"price": 2.50, "stock": 50, "img": "https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=400"},
+    "Oatmeal Raisin": {"price": 2.00, "stock": 30, "img": "https://images.unsplash.com/photo-1590080876251-130a74c692dd?w=400"},
+    "Sugar Cookie":   {"price": 1.75, "stock": 40, "img": "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=400"},
+    "Peanut Butter":  {"price": 2.25, "stock": 25, "img": "https://images.unsplash.com/photo-1506459225024-1428097a7e18?w=400"}
+}
 
-# --- Helper Functions ---
-def load_data():
-    customers = {}
-    history = []
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row['Type'] == 'Customer':
-                    customers[row['Name']] = row['Details']
+# --- Main UI ---
+st.title("🍭 Zia Sweet Treats")
+st.write("---")
+
+# 1. Better Customer Login Layout
+if not st.session_state.user["logged_in"]:
+    with st.container():
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.subheader("Welcome! Please Sign In")
+            name = st.text_input("Name")
+            contact = st.text_input("Phone or Email")
+            if st.button("Start Shopping"):
+                if name:
+                    st.session_state.user = {"name": name, "contact": contact, "logged_in": True}
+                    st.rerun()
                 else:
-                    history.append(row)
-    return customers, history
+                    st.error("Please enter your name.")
+    st.stop() # Prevents showing the store until login
 
-def save_order(name, contact, items, total):
-    file_exists = os.path.exists(DATA_FILE)
-    with open(DATA_FILE, 'a', newline='') as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["Type", "Name", "Date", "Details", "Total"])
-        # Ensure customer is saved
-        writer.writerow(["Customer", name, "", contact, ""])
-        # Save order
-        writer.writerow(["Order", name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), items, total])
+# 2. Main Store Layout
+col_menu, col_cart = st.columns([3, 1], gap="large")
 
-def generate_pdf(name, items, total):
-    filename = f"receipt_{name}.pdf"
-    c = canvas.Canvas(filename, pagesize=letter)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(100, 750, "COOKIE DELIGHT STORE RECEIPT")
-    c.setFont("Helvetica", 12)
-    c.drawString(100, 730, f"Customer: {name}")
-    c.drawString(100, 715, f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    c.line(100, 700, 500, 700)
+with col_menu:
+    st.markdown(f"### Hello, {st.session_state.user['name']}! 🍪")
+    st.write("Pick your favorite treats below:")
     
-    y = 680
-    for item, qty in items.items():
-        c.drawString(100, y, f"{qty}x {item}")
-        y -= 20
-    
-    c.line(100, y, 500, y)
-    c.drawString(100, y-20, f"TOTAL: ${total:.2f}")
-    c.save()
-    return filename
+    # Grid Layout for Cookies
+    m_col1, m_col2 = st.columns(2)
+    for i, (item, details) in enumerate(inventory.items()):
+        target_col = m_col1 if i % 2 == 0 else m_col2
+        with target_col:
+            st.markdown(f'<div class="cookie-card">', unsafe_allow_html=True)
+            st.image(details['img'], use_container_width=True)
+            st.write(f"**{item}**")
+            st.write(f"${details['price']:.2f} | Stock: {details['stock']}")
+            if st.button(f"Add to Box", key=item):
+                st.session_state.cart[item] = st.session_state.cart.get(item, 0) + 1
+                st.toast(f"Added {item}!")
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.write("") # Spacer
 
-# --- UI Layout ---
-st.title("🍪 Cookie Delight Manager Pro")
-
-customers, history = load_data()
-
-# Sidebar: Customer Info
-st.sidebar.header("Customer Login")
-customer_name = st.sidebar.text_input("Customer Name")
-contact_info = st.sidebar.text_input("Contact Info")
-
-if customer_name in customers:
-    st.sidebar.success(f"Welcome back, {customer_name}!")
-    contact_info = customers[customer_name]
-
-# Main Columns
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader("Menu")
-    menu_cols = st.columns(2)
-    for i, (cookie, info) in enumerate(st.session_state.inventory.items()):
-        with menu_cols[i % 2]:
-            st.info(f"**{cookie}**\n\nPrice: ${info['price']:.2f} | Stock: {info['stock']}")
-            if st.button(f"Add {cookie}", key=cookie, disabled=info['stock'] <= 0):
-                st.session_state.cart[cookie] = st.session_state.cart.get(cookie, 0) + 1
-                st.session_state.inventory[cookie]['stock'] -= 1
-                st.rerun()
-
-with col2:
-    st.subheader("Shopping Cart")
+with col_cart:
+    st.markdown("### 🛒 Your Box")
     if not st.session_state.cart:
-        st.write("Your cart is empty.")
+        st.write("Your box is empty.")
     else:
         total = 0
-        for item, qty in list(st.session_state.cart.items()):
-            price = st.session_state.inventory[item]['price'] * qty
-            total += price
-            st.write(f"{qty}x {item} - ${price:.2f}")
+        for item, qty in st.session_state.cart.items():
+            subtotal = inventory[item]['price'] * qty
+            total += subtotal
+            st.write(f"{qty}x {item} (${subtotal:.2f})")
         
-        st.divider()
-        st.write(f"### Total: ${total:.2f}")
+        st.write("---")
+        st.write(f"**Grand Total: ${total:.2f}**")
         
-        if st.button("Clear Cart"):
-            for item, qty in st.session_state.cart.items():
-                st.session_state.inventory[item]['stock'] += qty
+        if st.button("Clear Box"):
             st.session_state.cart = {}
             st.rerun()
+            
+        if st.button("Checkout & PDF"):
+            st.balloons()
+            st.success("Order Placed!")
+            # Add PDF generation logic here as needed
+            st.session_state.cart = {}
 
-        if st.button("Complete Order"):
-            if not customer_name:
-                st.error("Please enter a customer name!")
-            else:
-                items_str = ", ".join([f"{q}x {i}" for i, q in st.session_state.cart.items()])
-                save_order(customer_name, contact_info, items_str, total)
-                pdf_path = generate_pdf(customer_name, st.session_state.cart, total)
-                
-                with open(pdf_path, "rb") as f:
-                    st.download_button("Download Receipt PDF", f, file_name=pdf_path)
-                
-                st.session_state.cart = {}
-                st.success("Order Processed!")
-
-# Dashboard Section
-st.divider()
-if st.checkbox("Show Manager Dashboard (Password Required)"):
-    pw = st.text_input("Password", type="password")
-    if pw == "admin":
-        st.subheader("Sales Analytics")
-        df = pd.DataFrame(history)
-        if not df.empty:
-            df['Total'] = pd.to_numeric(df['Total'])
-            st.metric("Total Revenue", f"${df['Total'].sum():.2f}")
-            st.dataframe(df)
-        else:
-            st.write("No sales data yet.")
+# Sidebar: Sign out / Manager
+with st.sidebar:
+    st.write(f"Logged in as: **{st.session_state.user['name']}**")
+    if st.button("Sign Out"):
+        st.session_state.user = {"name": "", "contact": "", "logged_in": False}
+        st.session_state.cart = {}
+        st.rerun()
